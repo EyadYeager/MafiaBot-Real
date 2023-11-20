@@ -1,10 +1,11 @@
 import discord
 from discord import app_commands
+from discord.ui import Button
 
 
 class Aclient(discord.Client):
     def __init__(self):
-        super().__init__(intents=discord.Intents.default())
+        super().__init__(intents=discord.Intents.all())
         self.synced = False  # we use this so the bot doesn't sync commands more than once
 
     async def on_ready(self):
@@ -33,6 +34,39 @@ async def embed(interaction: discord.Interaction):
                              color=0xFF5733)
     await interaction.response.send_message(embed=embedded)
 
+
+@tree.command(guild=discord.Object(id=1174666167227531345), name='join',
+              description='Join the voice channel')
+async def join(interaction: discord.Interaction):
+    if not interaction.message.author.voice:
+        await interaction.response.send_message("{} is not connected to a voice channel".format(interaction.message.
+                                                                                                author.name))
+        return
+    else:
+        channel = interaction.message.author.voice.channel
+        await channel.connect()
+
+
+class ButtonView(discord.ui.View):
+    def __init__(self):
+        super().__init__()
+        self.add_buttons()  # Remember to add this line to call the add_buttons() function
+
+    def add_buttons(self):
+        mybutton = discord.ui.Button(label="Hello")
+        self.add_item(mybutton)
+
+        async def buttoncallback(interaction: discord.Interaction):
+            pass
+
+        mybutton.callback = buttoncallback
+
+
+@tree.command(name="button", description="Sends a hello message with buttons", guild=discord.Object(
+    id=1174666167227531345))
+async def button(interaction: discord.Interaction):
+    view = ButtonView()
+    await interaction.response.send_message("Click a button!", view=view)
 
 # plz work
 client.run("MTE3NDcxMDA2Mzc2ODgwMTMxMA.Gt5ah8.ugW8zvVgnHQSkHAYUrQ3-mjpsrIiXLv3N0RlvE")
