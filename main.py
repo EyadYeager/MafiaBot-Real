@@ -35,16 +35,16 @@ async def embed(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embedded)
 
 
-@tree.command(guild=discord.Object(id=1174666167227531345), name='join',
-              description='Join the voice channel')
-async def join(interaction: discord.Interaction):
-    if not interaction.message.author.voice:
-        await interaction.response.send_message("{} is not connected to a voice channel".format(interaction.message.
-                                                                                                author.name))
-        return
+
+@tree.command(guild=discord.Object(id=1174666167227531345), name='join', description='Enters a voice channel')
+async def join_voice(interaction: discord.Interaction):
+    # Check if the user is in a voice channel
+    if interaction.user.voice:
+        channel = interaction.user.voice.channel
+        voice_channel = await channel.connect()
+        await interaction.response.send_message(f"Joined {channel}")
     else:
-        channel = interaction.message.author.voice.channel
-        await channel.connect()
+        await interaction.response.send_message("You need to be in a voice channel to use this command.")
 
 
 class ButtonView(discord.ui.View):
@@ -67,6 +67,7 @@ class ButtonView(discord.ui.View):
 async def button(interaction: discord.Interaction):
     view = ButtonView()
     await interaction.response.send_message("Click a button!", view=view)
+
 
 # plz work
 client.run("MTE3NDcxMDA2Mzc2ODgwMTMxMA.Gt5ah8.ugW8zvVgnHQSkHAYUrQ3-mjpsrIiXLv3N0RlvE")
