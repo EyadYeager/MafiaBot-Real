@@ -35,7 +35,6 @@ async def embed(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embedded)
 
 
-
 @tree.command(guild=discord.Object(id=1174666167227531345), name='join', description='Enters a voice channel')
 async def join_voice(interaction: discord.Interaction):
     # Check if the user is in a voice channel
