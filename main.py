@@ -4,6 +4,9 @@ from discord.ui import Button
 from dotenv import load_dotenv
 import asyncio
 import os
+import nest_asyncio
+
+nest_asyncio.apply()
 
 intents = discord.Intents.default()
 intents.members = True
@@ -20,6 +23,51 @@ Doctor = "doctor"
 power_roles = ['mafia', 'doctor']
 
 
+class Aclient(discord.Client):
+    def __init__(self):
+        super().__init__(intents=discord.Intents.all())
+        self.synced = False  # we use this so the bot doesn't sync commands more than once
+
+
+client = Aclient()
+tree = app_commands.CommandTree(client)
+channel = client.get_channel(1178635785612824626)
+
+
+async def death(channel, player, server):
+    server.players[player].alive = 0
+
+
+async def game_end(channel, winner, server):  # end of game message (role reveal, congratulation of winners)
+    server.running = 0
+    await channel.send('\n'.join(
+        [end_text[winner]] + ['The roles were as follows:'] + ['<@%s> : `%s`' % (player.id, player.role) for player in
+                                                               server.players.values()]))
+    for key in server.players:
+        if not server.players[key].ingame:
+            server.players.pop(key)
+
+
+async def check_end(channel, server):
+    if not sum([player.role == 'mafia' for player in server.players.values() if player.alive]):  # no mafia remaining
+        await game_end(channel, 'Town', server)
+        await channel.send(game_end_Town)
+        return 1
+    elif sum([player.role == 'mafia' for player in server.players.values() if player.alive]) >= sum(
+            [player.role != 'mafia' for player in server.players.values() if player.alive]):
+        await game_end(channel, 'Mafia', server)
+        await channel.send(game_end_Mafia)
+        return 1
+    return 0
+
+
+async def check_votes(channel, server):
+    for player in server.players.values():
+        if player.alive and player.vote is None:
+            return 0
+    return 1
+
+
 class Player:
     def __init__(self, id, server):
         self.id = id
@@ -29,39 +77,9 @@ class Player:
         self.server = server
         self.ingame = 1  # changes to 0 upon m!leave, will be removed from server.players upon game end
         self.options = []  # nighttime options for power role
-        self.action = 0  # if a power role, if has performed night action or not
+        self.action = 0  # if a power role, if it has performed night action or not
         self.cur_choice = None  # if a power role, their choice for the night
         self.lst_choice = None  # if parity cop, last choice
-
-
-async def death(channel, player, server):
-    server.players[player].alive = 0
-
-
-async def game_end(channel, winner, server):  # end of game message (role reveal, congratulation of winners)
-    server.running = 0
-    await channel.send('\n'.join([end_text[winner]] + ['The roles were as follows:'] + ['<@%s> : `%s`' % (player.id, player.role) for player in server.players.values()]))
-    for key in server.players:
-        if not server.players[key].ingame:
-            server.players.pop(key)
-
-
-async def check_end(channel, server):
-    if not sum([player.role == 'mafia' for player in server.players.values() if player.alive]):  # no mafia remaining
-        await game_end(channel, 'Town', server)
-        return 1
-    elif sum([player.role == 'mafia' for player in server.players.values() if player.alive]) >= sum(
-            [player.role != 'mafia' for player in server.players.values() if player.alive]):
-        await game_end(channel, 'Mafia', server)
-        return 1
-    return 0
-
-
-async def check_votes(channel, server):
-    for player in server.players.values():
-        if player.alive and player.vote == None:
-            return 0
-    return 1
 
 
 class MafiaGame:
@@ -78,7 +96,7 @@ class MafiaGame:
                 self.phase = 0  # 0 for night, 1 for day
                 self.actions = 0  # how many actions remain during nighttime
                 self.time = 0  # how much time remains in the phase
-                self.round = 0  # what day/night of the game it is (e.g. day 1, night 2, etc)
+                self.round = 0  # what day/night of the game it is (e.g. day 1, night 2, etc.)
                 self.saves = []  # list of doctor saves (by ID)
                 self.settings = {
                     'selfsave': 0,  # doctor can save themselves
@@ -92,13 +110,78 @@ class MafiaGame:
                     'mafia': 0
                 }
 
+    async def start_night(self):
+        channel2 = client.get_channel(1178635785612824626)
+        if start_night:
+            await channel2.send(f"{Night_dialogue}")
+        else:
+            await channel2.send("There was an error with loading dialogue")
+        self.state = NIGHT
+        self.day_number += 1
+        # Send night start message
+
+        await channel2.send(f"Night {self.day_number} has begun!")
+
+        # Allow Mafia to perform actions
+        await self.mafia_night_actions()
+
+    async def start_day(self):
+        channel2 = client.get_channel(1178635785612824626)
+        if start_day:
+            await channel2.send(f"{Night_summary}")
+
+        self.state = DAY
+        # Send day start message
+
+        await channel2.send(f"Day {self.day_number} has begun!")
+
+        # Allow players to discuss and vote
+        await self.daytime_voting()
+
     async def start_game(self):
+        channel2 = client.get_channel(1178635785612824626)
         # Start the game loop
+        if start_game:
+            await channel2.send("🌙 Welcome to the mysterious town of MafiaVille! 🌟"
+
+                                " Congratulations, brave townsfolk! You find yourselves in "
+                                "the heart of a thrilling game of Mafia, where secrets, deception, and strategy will "
+                                "shape the fate of the"
+                                "town."
+                                "🔍 Quick Overview:"
+
+                                "- The town is divided into two factions: the Innocents and the Mafia."
+                                "- The Innocents aim to identify and eliminate the Mafia members, while the Mafia "
+                                "seeks to outnumber and"
+                                "control the town.)"
+                                "- Each player is assigned a role with unique abilities, including roles like citizen "
+                                "and roles with"
+                                "extra abilities like the doctor and the elusive Mafia members."
+
+                                "- As an Innocent, work together to identify and vote out Mafia members during the day."
+
+                                "🌟 Your Mission:"
+
+                                "- If you're part of the Mafia, be cunning and discreet as you plot with your fellow "
+                                "members to"
+                                "eliminate the townsfolk."
+                                "🌞 Day Phase:"
+
+                                "- Discuss openly in the town square, share suspicions, and vote to eliminate a "
+                                "player you believe is"
+                                "Mafia."
+                                "- Use your role's abilities wisely to gather information or protect others."
+                                "🌙 Night Phase:"
+
+                                "- Secrets unfold as the town sleeps. The Mafia will choose their target, and special roles will "
+                                "carry out their nightly duties.")
+        else:
+            await channel2.send("Game hasn't begun")
         while True:
-            await self.start_night()
+            await start_night()
             await asyncio.sleep(5)  # Adjust the delay between night and day
 
-            await self.start_day()
+            await start_day()
             await asyncio.sleep(5)  # Adjust the delay between day and night
 
     async def assign_roles(self):
@@ -112,40 +195,27 @@ class MafiaGame:
             else:
                 self.players.append(Player(member, Citizen))
 
-    async def start_night(self):
-        self.state = NIGHT
-        self.day_number += 1
-        # Send night start message
-        channel = client.get_channel(1178635785612824626)
-
-        await channel.send(f"Night {self.day_number} has begun!")
-
-        # Allow Mafia to perform actions
-        await self.mafia_night_actions()
 
     async def mafia_night_actions(self):
         mafia_players = [player for player in self.players if player.role == Mafia]
         # Implement logic for Mafia actions
 
-    async def start_day(self):
-        self.state = DAY
-        # Send day start message
-        channel = client.get_channel(1178635785612824626)
-
-        await channel.send(f"Day {self.day_number} has begun!")
-
-        # Allow players to discuss and vote
-        await self.daytime_voting()
+    async def night_summary(self):
+        if night_summary:
+            await channel.send(f"{Night_summary}")
+        else:
+            await channel.send("There was an error with loading dialogue")
 
     async def daytime_voting(self):
-        MAD = 1
+        if daytime_voting:
+            await channel.send(f"{Day_dialogue}")
+        else:
+            await channel.send("There was an error with loading dialogue")
         # Implement logic for player discussion and voting
-
-
-class Aclient(discord.Client):
-    def __init__(self):
-        super().__init__(intents=discord.Intents.all())
-        self.synced = False  # we use this so the bot doesn't sync commands more than once
+        if daytime_voting:
+            await channel.send(Announcements)
+        else:
+            await channel.send("There was an error with loading dialogue")
 
     async def on_ready(self):
         await self.wait_until_ready()
@@ -158,10 +228,6 @@ class Aclient(discord.Client):
 
 
 # bob
-
-client = Aclient()
-tree = app_commands.CommandTree(client)
-
 
 @tree.command(guild=discord.Object(id=1174666167227531345), name='embedded',
               description='gives a very nice link')  # guild specific
